@@ -65,6 +65,46 @@ La API queda en <http://localhost:8080> y Swagger UI en <http://localhost:8080/s
 
 El Dockerfile usa dos etapas: compila con Maven/Java 17 y ejecuta el JAR en una imagen ligera de Java 17. Las credenciales se pasan por variables de entorno y nunca se incluyen en la imagen.
 
+## Despliegue en Vercel + Supabase
+
+Vercel puede ejecutar esta API mediante su **Container Runtime** (Beta), usando el archivo `Dockerfile.vercel` que está en la raíz. No es una web estática: Vercel construye la imagen, la ejecuta y le asigna una URL pública.
+
+### 1. Base de datos en Supabase
+
+1. Crea un proyecto en [Supabase](https://supabase.com).
+2. Ve a **Project Settings → Database → Connection string → Session pooler** (puerto 5432).
+3. Guarda estos tres datos:
+   - `DB_URL`: `jdbc:postgresql://aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require`
+   - `DB_USER`: `postgres.TU_PROJECT_REF`
+   - `DB_PASSWORD`: la contraseña del proyecto.
+4. No hace falta crear las tablas a mano: al arrancar, Hibernate las crea o actualiza (`ddl-auto=update`). Si prefieres hacerlo manualmente, ejecuta `docs/schema.sql` en el SQL Editor.
+
+### 2. Proyecto en Vercel
+
+1. En Vercel, elige **Add New → Project** e importa el repositorio de GitHub.
+2. Vercel detecta `Dockerfile.vercel` y selecciona el preset **Container**. Si no lo detecta, en **Framework Preset** elige **Container**.
+3. En **Environment Variables** agrega:
+
+   | Variable | Valor |
+   |---|---|
+   | `DB_URL` | La cadena JDBC de Supabase |
+   | `DB_USER` | `postgres.TU_PROJECT_REF` |
+   | `DB_PASSWORD` | La contraseña de Supabase |
+
+4. Pulsa **Deploy**. Al terminar tendrás una URL como `https://ferreteria-api.vercel.app`.
+
+Comprueba:
+
+- `https://TU-PROYECTO.vercel.app/` → JSON con el estado de la API.
+- `https://TU-PROYECTO.vercel.app/swagger-ui.html` → Swagger UI.
+- `https://TU-PROYECTO.vercel.app/api/productos` → lista de productos en JSON.
+
+> El Container Runtime de Vercel es Beta y escala a cero tras unos minutos sin tráfico; la primera petición puede tardar unos segundos (cold start). Para producción estable también sirven Render, Railway o Fly.io con el `Dockerfile` normal.
+
+### 3. Importar el repositorio
+
+Si el repositorio original aún no tiene el código, usa el fork `https://github.com/zxvsho/Ferreter-a-Constructor-` o fusiona el Pull Request #1 en el repositorio original. Luego impórtalo en Vercel.
+
 ## Pruebas unitarias
 
 ```bash
