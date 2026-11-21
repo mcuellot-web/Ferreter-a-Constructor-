@@ -36,4 +36,19 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- Perfil opcional para probar la API sin Supabase: mvn -Pdemo spring-boot:run -Dspring-boot.run.profiles=demo -->
+    <profile>
+      <id>demo</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.h2database</groupId>
+          <artifactId>h2</artifactId>
+          <version>2.2.224</version>
+          <scope>runtime</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

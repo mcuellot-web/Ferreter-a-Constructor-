@@ -1,33 +1,81 @@
 # Ferretería API
 
-API REST de inventario y ventas para una ferretería. Java 17, Spring Boot 3, Spring Data JPA, PostgreSQL (Supabase), Docker, JUnit 5 + Mockito.
+API REST de inventario y ventas para la Ferretería El Constructor. Está construida con **Java 17, Spring Boot 3, Spring Data JPA y PostgreSQL (Supabase)**, y se puede ejecutar con Maven o con Docker. Incluye pruebas unitarias con JUnit 5 + Mockito y una colección de Postman.
+
+> **Esta aplicación es un backend, no una página web.** No tiene pantallas de login ni un panel de administración: expone endpoints JSON que consumen Postman, Swagger UI, una futura aplicación web o una app móvil. La única interfaz web incluida es **Swagger UI**, que sirve para documentar y probar los endpoints.
 
 ## Requisitos
-- Java 17 y Maven 3.9+ (o solo Docker)
-- Proyecto en Supabase
 
-## Configuración
-1. Copia `.env.example` a `.env` y completa los datos de Supabase (Project Settings > Database > Connection string > **Session pooler**, puerto 5432).
-2. Las tablas se crean solas al arrancar (`ddl-auto=update`). Referencia en `docs/schema.sql`.
+- Java 17 y Maven 3.9+ (para ejecución local), o
+- Docker + Docker Compose (para ejecución en contenedor)
+- Una base de datos PostgreSQL. Para producción se usa Supabase; para una demostración rápida no se necesita nada, gracias al perfil `demo` con H2.
 
-## Ejecutar
+## Opción 1: probar sin base de datos (modo demo)
+
+Ideal para ver la API funcionando sin crear un proyecto en Supabase. Usa una base H2 en memoria y carga datos de ejemplo.
+
 ```bash
-# Local
-export $(grep -v '^#' .env | xargs)
-mvn spring-boot:run
+mvn -Pdemo spring-boot:run -Dspring-boot.run.profiles=demo
+```
 
-# Docker
+Luego abre:
+
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
+- Consola H2: <http://localhost:8080/h2-console> (JDBC URL: `jdbc:h2:mem:ferreteria`, usuario `sa`, sin contraseña)
+
+Datos de ejemplo: categorías, un proveedor, un cliente y cuatro productos (uno de ellos con stock bajo).
+
+> El perfil `demo` es solo para pruebas. La aplicación entregada sigue usando PostgreSQL/Supabase por defecto.
+
+## Opción 2: conectar con Supabase (PostgreSQL)
+
+1. Crea un proyecto en [Supabase](https://supabase.com).
+2. En **Project Settings → Database → Connection string**, copia la cadena del **Session pooler** (puerto 5432).
+3. Copia `.env.example` a `.env` y completa las variables:
+
+```bash
+cp .env.example .env
+```
+
+```env
+DB_URL=jdbc:postgresql://aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+DB_USER=postgres.TU_PROJECT_REF
+DB_PASSWORD=TU_PASSWORD
+```
+
+4. Exporta las variables y ejecuta:
+
+```bash
+set -a
+source .env
+set +a
+mvn spring-boot:run
+```
+
+Las tablas se crean automáticamente al arrancar (`spring.jpa.hibernate.ddl-auto=update`). El archivo `docs/schema.sql` contiene el esquema de referencia para ejecutarlo manualmente en el SQL Editor de Supabase.
+
+## Opción 3: Docker
+
+```bash
+cp .env.example .env    # completar con los datos de Supabase
 docker compose up --build
 ```
-Swagger UI: http://localhost:8080/swagger-ui.html
+
+La API queda en <http://localhost:8080> y Swagger UI en <http://localhost:8080/swagger-ui.html>.
+
+El Dockerfile usa dos etapas: compila con Maven/Java 17 y ejecuta el JAR en una imagen ligera de Java 17. Las credenciales se pasan por variables de entorno y nunca se incluyen en la imagen.
 
 ## Pruebas unitarias
+
 ```bash
 mvn test
 ```
 
+Son 13 pruebas con JUnit 5 y Mockito. No requieren base de datos porque los repositorios se simulan.
+
 ## Endpoints
-| Recurso | Método y ruta |
+
+| Recurso | Métodos y rutas |
 |---|---|
 | Categorías | `POST/GET /api/categorias`, `GET/PUT/DELETE /api/categorias/{id}` |
 | Proveedores | `POST/GET /api/proveedores`, `GET/PUT/DELETE /api/proveedores/{id}` |
@@ -36,21 +84,67 @@ mvn test
 | Ventas | `POST/GET /api/ventas`, `GET /api/ventas/{id}` |
 | Inventario | `POST /api/inventario/entradas`, `GET /api/inventario/productos/{id}/entradas` |
 
-Colección de Postman: `docs/ferreteria-api.postman_collection.json` (importar y usar `baseUrl`).
+En total son 26 endpoints. La colección `docs/ferreteria-api.postman_collection.json` incluye solicitudes de ejemplo; se importa en Postman o Insomnia y se ajusta la variable `baseUrl` (por defecto `http://localhost:8080`).
+
+### Ejemplo rápido con curl
+
+```bash
+# Listar productos (con los datos del perfil demo)
+curl http://localhost:8080/api/productos
+
+# Registrar una venta
+curl -X POST http://localhost:8080/api/ventas \
+  -H "Content-Type: application/json" \
+  -d '{"clienteId":1,"items":[{"productoId":1,"cantidad":2}]}'
+
+# Consultar productos con stock bajo
+curl http://localhost:8080/api/productos/stock-bajo
+```
 
 ## Reglas de negocio
-- RN1: SKU de producto, NIT de proveedor, documento de cliente y nombre de categoría son únicos.
-- RN2: el precio de venta no puede ser menor al precio de costo.
-- RN3: no se puede vender más unidades que el stock disponible.
-- RN4: cada venta descuenta stock; cada entrada de inventario lo aumenta.
-- RN5: el precio unitario de la venta se toma del producto al momento de vender; el total es la suma de subtotales.
-- RN6: un producto inactivo no se puede vender; eliminar un producto es una baja lógica.
-- RN7: `GET /api/productos/stock-bajo` lista productos con stock menor o igual al mínimo.
+
+- **RN1:** SKU de producto, NIT de proveedor, documento de cliente y nombre de categoría son únicos.
+- **RN2:** el precio de venta no puede ser menor al precio de costo.
+- **RN3:** no se puede vender más unidades que el stock disponible.
+- **RN4:** cada venta descuenta stock; cada entrada de inventario lo aumenta.
+- **RN5:** el precio unitario se toma del producto al momento de vender; el total es la suma de subtotales.
+- **RN6:** un producto inactivo no se puede vender; eliminar un producto es una baja lógica.
+- **RN7:** `GET /api/productos/stock-bajo` lista productos con stock menor o igual al mínimo.
 
 ## Arquitectura y SOLID
+
 Capas: `controller` → `service` (interfaces + implementaciones) → `repository` → `model`.
-- **S**: cada clase tiene una sola responsabilidad (controlador HTTP, servicio de negocio, repositorio, DTO).
-- **O**: nuevos servicios se agregan implementando `CrudService` sin modificar los existentes.
-- **L**: toda implementación de `CrudService` es intercambiable.
-- **I**: interfaces pequeñas (`VentaService`, `InventarioService`, `ProductoService`).
-- **D**: controladores y servicios dependen de abstracciones; inyección por constructor.
+
+- **S:** cada clase tiene una sola responsabilidad (controlador HTTP, servicio de negocio, repositorio, DTO).
+- **O:** nuevos servicios se agregan implementando `CrudService` sin modificar los existentes.
+- **L:** toda implementación de `CrudService` es intercambiable.
+- **I:** interfaces pequeñas (`VentaService`, `InventarioService`, `ProductoService`).
+- **D:** controladores y servicios dependen de abstracciones; inyección por constructor.
+
+## Estructura del proyecto
+
+```
+src/main/java/com/ferreteria/api/
+├── controller/     Endpoints REST
+├── service/        Lógica de negocio e interfaces
+├── repository/     Acceso a datos (Spring Data JPA)
+├── model/          Entidades JPA
+├── dto/            Objetos de entrada y salida
+└── exception/      Manejo global de errores
+
+src/main/resources/
+├── application.properties        Configuración por variables de entorno
+├── application-demo.properties   Perfil H2 para pruebas locales
+└── data-demo.sql                 Datos de ejemplo del perfil demo
+
+docs/
+├── ferreteria-api.postman_collection.json
+└── schema.sql
+```
+
+## Estado del proyecto
+
+- Compilación y pruebas verificadas con Java 17 y Maven 3.9.9.
+- 13/13 pruebas unitarias en verde.
+- Endpoints probados de extremo a extremo (creación, ventas, stock, validaciones y errores).
+- Despliegue con Docker preparado; requiere Docker Engine y un `.env` con credenciales de Supabase.
